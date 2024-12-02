@@ -10,6 +10,21 @@
 - **Machine Learning Predictions**: Uses trained models to predict future prices.
 - **Trading Signals**: Provides "Buy," "Sell," or "Hold" recommendations based on predictions.
 
+
+---
+## **Running The Project**
+1. In root directory, create virtual environment
+```
+python -m venv venv
+```
+2. Activate virtual environment
+    - Windows: ``` .\venv\Scripts\activate ```
+    - MacOS and Linux: ``` source venv/bin/activate ```
+3. Install dependencies: ``` pip install -r requirements.txt ```
+
+
 ---
 
 ## **Project Structure**
+
+
