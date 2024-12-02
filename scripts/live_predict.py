@@ -4,10 +4,12 @@ import joblib
 import time
 import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 # File Paths
-MODEL_PATH = r"C:\Users\jeria\NeuralCrypt Labs\models\linear_regression_model.pkl"
-LOG_PATH = r"C:\Users\jeria\NeuralCrypt Labs\logs\live_predictions.csv"
+BASE_PATH = Path(__file__).resolve().parents[1]
+MODEL_PATH = BASE_PATH / "models" / "linear_regression_model.pkl"
+LOG_PATH = BASE_PATH / "logs" / "live_predictions.csv"
 
 # Cryptocompare API Key and Base URL
 API_KEY = '9bf2ff68d6680c3f789283da46195442cef9ee8f601182cfc731f248ab6616e9'

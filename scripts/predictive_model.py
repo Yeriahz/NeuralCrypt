@@ -5,11 +5,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import joblib
+from pathlib import Path
 
 # File Paths
-RAW_DATA_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\processed_daily_data.csv"
-ENHANCED_DATA_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\enhanced_daily_data.csv"
-MODEL_PATH = r"C:\Users\jeria\NeuralCrypt Labs\models\linear_regression_model.pkl"
+BASE_PATH = Path(__file__).resolve().parents[1]
+RAW_DATA_PATH = BASE_PATH / "data" / "processed_daily_data.csv"
+ENHANCED_DATA_PATH = BASE_PATH / "data" / "enhanced_daily_data.csv"
+MODEL_PATH = BASE_PATH / "models" / "linear_regression_model.pkl"
 
 # Step 1: Load and Process Data
 print("Loading raw data...")
