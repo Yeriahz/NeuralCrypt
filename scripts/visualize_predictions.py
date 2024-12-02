@@ -1,9 +1,11 @@
 # Import Libraries
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 # File Path
-PREDICTIONS_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\predictions.csv"
+BASE_PATH = Path(__file__).resolve().parents[1]
+PREDICTIONS_PATH = BASE_PATH / "data" / "predictions.csv"
 
 # Load Predictions
 print("Loading predictions...")

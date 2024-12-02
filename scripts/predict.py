@@ -3,11 +3,13 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
+from pathlib import Path
 
 # File Paths
-MODEL_PATH = r"C:\Users\jeria\NeuralCrypt Labs\models\linear_regression_model.pkl"
-NEW_DATA_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\new_data.csv"
-PREDICTIONS_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\predictions.csv"
+BASE_PATH = Path(__file__).resolve().parents[1]
+MODEL_PATH = BASE_PATH / "models" / "linear_regression_model.pkl"
+NEW_DATA_PATH = BASE_PATH / "data" / "new_data.csv"
+PREDICTIONS_PATH = BASE_PATH / "data" / "predictions.csv"
 
 # Step 1: Validate File Existence and Non-Empty
 if os.path.exists(NEW_DATA_PATH):

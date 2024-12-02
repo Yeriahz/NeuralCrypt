@@ -1,12 +1,15 @@
 # Import Libraries
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
+
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 # File paths
-DAILY_DATA_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\btc_historical_daily.csv"
-HOURLY_DATA_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\btc_historical_hourly.csv"
-MINUTE_DATA_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\btc_historical_minute.csv"
-PROCESSED_DATA_PATH = r"C:\Users\jeria\NeuralCrypt Labs\data\processed_daily_data.csv"
+DAILY_DATA_PATH = DATA_DIR / "btc_historical_daily.csv"
+HOURLY_DATA_PATH = DATA_DIR / "btc_historical_hourly.csv"
+MINUTE_DATA_PATH = DATA_DIR / "btc_historical_minute.csv"
+PROCESSED_DATA_PATH = DATA_DIR / "processed_daily_data.csv"
 
 # Load Data
 daily_data = pd.read_csv(DAILY_DATA_PATH)

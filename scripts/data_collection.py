@@ -2,11 +2,12 @@
 import os
 import requests
 import pandas as pd
+from pathlib import Path
 
 # Replace 'your_api_key_here' with your actual API key from Cryptocompare
 API_KEY = '9bf2ff68d6680c3f789283da46195442cef9ee8f601182cfc731f248ab6616e9'
 BASE_URL = 'https://min-api.cryptocompare.com/data/v2/'
-DATA_FOLDER = r"C:\Users\jeria\NeuralCrypt Labs\data"
+DATA_FOLDER = Path(__file__).resolve().parents[1] / "data"
 
 print("API key and base URL set up.")
 
