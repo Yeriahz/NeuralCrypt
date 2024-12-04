@@ -5,6 +5,7 @@ import time
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import numpy as np  # For standard deviation and confidence intervals
 
 # File Paths
 BASE_PATH = Path(__file__).resolve().parents[1]
@@ -50,7 +51,7 @@ def get_next_hourly_close():
     """
     Get the next hourly close time in UTC.
     """
-    now = datetime.now(timezone.utc)  # Get current UTC time
+    now = datetime.now(timezone.utc)
     next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     return next_hour
 
@@ -59,13 +60,11 @@ def prepare_features(historical_data, current_close):
     """
     Calculate lagged close price and 7-day moving average based on historical data.
     """
-    if historical_data and len(historical_data) >= 2:  # Ensure at least 2 data points for lagging
-        # Extract Close Prices
+    if historical_data and len(historical_data) >= 2:
         close_prices = [day["close"] for day in historical_data]
-        close_lag1 = close_prices[-2]  # Second to last close price (Lagged feature)
-        seven_day_ma = sum(close_prices) / len(close_prices)  # Calculate 7-day moving average
+        close_lag1 = close_prices[-2]
+        seven_day_ma = sum(close_prices) / len(close_prices)
     else:
-        # Fallback to current close price if insufficient historical data
         print("Warning: Insufficient historical data for features. Using current close as fallback.")
         close_lag1 = current_close
         seven_day_ma = current_close
@@ -75,18 +74,30 @@ def prepare_features(historical_data, current_close):
         "7-day MA": [seven_day_ma]
     })
 
+# Function to Calculate Confidence Intervals
+def calculate_confidence_interval(prediction, std_dev, confidence_level=1.96):
+    """
+    Calculate confidence intervals based on standard deviation and confidence level.
+    """
+    lower_bound = prediction - (confidence_level * std_dev)
+    upper_bound = prediction + (confidence_level * std_dev)
+    return round(lower_bound, 2), round(upper_bound, 2)
+
 # Main Function
 def main():
     print("Loading trained model...")
     model = joblib.load(MODEL_PATH)
     print("Model loaded successfully.\n")
     
+    # Simulated standard deviation (can be replaced with real analysis)
+    std_dev = 100  # Example standard deviation in USD
+    
     # Ensure the logs directory exists
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
     
     fetch_interval = 300  # Default fetch interval (every 5 minutes)
     while True:
-        now = datetime.now(timezone.utc).replace(microsecond=0)  # Current UTC time without milliseconds
+        now = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"Fetching OHLC data at {now}...")
         historical_data = fetch_ohlc_data("BTC", "USD", limit=7)  # Fetch historical data for features
         
@@ -103,13 +114,13 @@ def main():
                 print(f"Market Volatility: {volatility:.2f}%")
                 
                 # Adjust Fetch Interval Based on Volatility
-                if volatility > 10:  # Extreme volatility
+                if volatility > 10:
                     fetch_interval = 60  # Fetch every 1 minute
-                elif volatility > 5:  # High volatility
+                elif volatility > 5:
                     fetch_interval = 120  # Fetch every 2 minutes
-                elif volatility > 2:  # Moderate volatility
+                elif volatility > 2:
                     fetch_interval = 300  # Fetch every 5 minutes
-                else:  # Low volatility
+                else:
                     fetch_interval = 600  # Fetch every 10 minutes
             else:
                 print("Error: Invalid 'high', 'low', or 'close' values in OHLC data.")
@@ -122,31 +133,31 @@ def main():
             
             # Predict
             prediction = model.predict(features)[0]
-            next_close_time = get_next_hourly_close().replace(microsecond=0)  # Remove milliseconds
+            lower_bound, upper_bound = calculate_confidence_interval(prediction, std_dev)
+            next_close_time = get_next_hourly_close().replace(microsecond=0)
 
             # Generate Trading Signal
-            if prediction > close_price * 1.02:  # Predicted price 2% higher
+            if prediction > close_price * 1.02:
                 signal = "Buy"
-            elif prediction < close_price * 0.98:  # Predicted price 2% lower
+            elif prediction < close_price * 0.98:
                 signal = "Sell"
             else:
                 signal = "Hold"
 
             print(f"Real-Time BTC Close Price at {now}: ${close_price:.2f}")
             print(f"Predicted Close Price for {next_close_time}: ${prediction:.2f}")
+            print(f"Confidence Interval: [${lower_bound}, ${upper_bound}]")
             print(f"Trading Signal: {signal}\n")
-            
+
             # Save to Log
             if not LOG_PATH.exists():
                 with open(LOG_PATH, "w") as log_file:
-                    log_file.write("timestamp,real_price,predicted_price,signal,volatility\n")
+                    log_file.write("timestamp,real_price,predicted_price,confidence_interval,signal,volatility\n")
             
             with open(LOG_PATH, "a") as log_file:
-                log_file.write(f"{now},{close_price},{prediction},{signal},{volatility:.2f}\n")
+                log_file.write(f"{now},{close_price},{prediction},[{lower_bound},{upper_bound}],{signal},{volatility:.2f}\n")
         
-        # Wait before fetching data again
         time.sleep(fetch_interval)
 
-# Run the Script
 if __name__ == "__main__":
     main()
