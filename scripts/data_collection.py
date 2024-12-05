@@ -5,33 +5,38 @@ import pandas as pd
 from pathlib import Path
 
 # Constants and Configurations
-API_KEY = '9bf2ff68d6680c3f789283da46195442cef9ee8f601182cfc731f248ab6616e9'
-BASE_URL = 'https://min-api.cryptocompare.com/data/v2/'
+CRYPTOCOMPARE_API_KEY = '9bf2ff68d6680c3f789283da46195442cef9ee8f601182cfc731f248ab6616e9'
+COINGECKO_API_KEY = 'CG-2rFHTphfVY7RPmZopFvdTpQH'
+CRYPTOCOMPARE_BASE_URL = 'https://min-api.cryptocompare.com/data/v2/'
+COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3/'
 DATA_FOLDER = Path(__file__).resolve().parents[1] / "data"
 
-print("API key and base URL set up.")
+print("API keys and base URLs set up.")
 
-# Function to Fetch Data from Cryptocompare
-def fetch_data(endpoint, params):
-    """
-    Fetch data from a specified Cryptocompare API endpoint.
-    """
-    url = f"{BASE_URL}{endpoint}"
-    params["api_key"] = API_KEY
+# Function to Fetch Data from an API
+def fetch_data(api, endpoint, params=None):
+    if api == "cryptocompare":
+        base_url = CRYPTOCOMPARE_BASE_URL
+        params = params or {}
+        params["api_key"] = CRYPTOCOMPARE_API_KEY
+    elif api == "coingecko":
+        base_url = COINGECKO_BASE_URL
+    else:
+        raise ValueError("Unsupported API specified.")
+    
+    url = f"{base_url}{endpoint}"
     response = requests.get(url, params=params)
+    
     if response.status_code == 200:
         return response.json()
     else:
-        print(f"Error fetching data from {endpoint}: {response.status_code}")
+        print(f"Error fetching data from {api}: {response.status_code}")
         return None
 
-# Historical Daily Data
+# Fetch Historical Daily Data from CryptoCompare
 def get_historical_daily(crypto="BTC", currency="USD", limit=100):
-    """
-    Fetch historical daily data for a given cryptocurrency.
-    """
     params = {"fsym": crypto, "tsym": currency, "limit": limit}
-    data = fetch_data("histoday", params)
+    data = fetch_data("cryptocompare", "histoday", params)
     if data:
         df = pd.DataFrame(data["Data"]["Data"])
         df.rename(columns={
@@ -43,31 +48,26 @@ def get_historical_daily(crypto="BTC", currency="USD", limit=100):
             "volumeto": "Volume To",
             "close": "Close Price"
         }, inplace=True)
-        df["time"] = pd.to_datetime(df["time"], unit="s")  # Convert timestamps to readable dates
+        df["time"] = pd.to_datetime(df["time"], unit="s")
         return df
     else:
         print("Failed to fetch historical daily data.")
         return None
 
 # Fetch Latest Data for Predictions
-def get_latest_data(crypto="BTC", currency="USD", limit=5):
-    """
-    Fetch the latest data for predictions.
-    """
-    params = {"fsym": crypto, "tsym": currency, "limit": limit}
-    data = fetch_data("histoday", params)
+def get_latest_data(crypto_id="bitcoin", currency="usd", days="7"):
+    endpoint = f"coins/{crypto_id.lower()}/market_chart"
+    params = {"vs_currency": currency, "days": days}
+    data = fetch_data("coingecko", endpoint, params)
     if data:
-        df = pd.DataFrame(data["Data"]["Data"])
-        df.rename(columns={
-            "time": "time",
-            "high": "High Price",
-            "low": "Low Price",
-            "open": "Open Price",
-            "volumefrom": "Volume From",
-            "volumeto": "Volume To",
-            "close": "Close Price"
-        }, inplace=True)
-        df["time"] = pd.to_datetime(df["time"], unit="s")  # Convert timestamps to readable dates
+        prices = data.get("prices", [])
+        df = pd.DataFrame(prices, columns=["time", "Close Price"])
+        df["time"] = pd.to_datetime(df["time"], unit="ms")
+        df["High Price"] = df["Close Price"] * 1.02  # Mock data
+        df["Low Price"] = df["Close Price"] * 0.98
+        df["Open Price"] = df["Close Price"]
+        df["Volume From"] = 0  # Default for missing data
+        df["Volume To"] = 0
         return df
     else:
         print("Failed to fetch latest data.")
@@ -75,26 +75,26 @@ def get_latest_data(crypto="BTC", currency="USD", limit=5):
 
 # Save Data to CSV
 def save_to_csv(dataframe, filename):
-    """
-    Save a DataFrame to a CSV file in the data folder.
-    """
+    required_columns = ["time", "High Price", "Low Price", "Open Price", "Volume From", "Volume To", "Close Price"]
+    for col in required_columns:
+        if col not in dataframe:
+            dataframe[col] = 0
     file_path = DATA_FOLDER / filename
-    DATA_FOLDER.mkdir(parents=True, exist_ok=True)  # Ensure data folder exists
+    DATA_FOLDER.mkdir(parents=True, exist_ok=True)
     dataframe.to_csv(file_path, index=False)
     print(f"Data saved to {file_path}")
 
 # Main Function
 def main():
-    print("Fetching historical daily data...")
+    print("Fetching historical daily data from CryptoCompare...")
     daily_data = get_historical_daily("BTC", "USD", 100)
     if daily_data is not None:
         save_to_csv(daily_data, "btc_historical_daily.csv")
 
-    print("Fetching latest daily data for predictions...")
-    latest_data = get_latest_data("BTC", "USD", 5)
+    print("Fetching latest hourly data for predictions from multiple sources...")
+    latest_data = get_latest_data("bitcoin", "usd", "7")
     if latest_data is not None:
         save_to_csv(latest_data, "new_data.csv")
 
-# Run the Script
 if __name__ == "__main__":
     main()
