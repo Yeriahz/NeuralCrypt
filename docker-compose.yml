@@ -1,0 +1,12 @@
+services:
+  mysql_development:
+    image: mysql:8.0.33
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: adevpassword
+      MYSQL_USER: yeriahz_dev
+      MYSQL_PASSWORD: apassword
+      MYSQL_DATABASE: yeriahz_neural_crypt
+    ports:
+      - 3333:3306

@@ -17,10 +17,12 @@
 ```
 python -m venv venv
 ```
-2. Activate virtual environment
+2. Open MySQL database with Docker
+    - `docker compose up`
+3. Activate virtual environment
     - Windows: ``` .\venv\Scripts\activate ```
     - MacOS and Linux: ``` source venv/bin/activate ```
-3. Install dependencies: ``` pip install -r requirements.txt ```
+4. Install dependencies: ``` pip install -r requirements.txt ```
 
 
 ---
