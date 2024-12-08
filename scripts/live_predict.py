@@ -1,9 +1,10 @@
+# Import Libraries
 import requests
 import pandas as pd
 import joblib
 import time
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 import numpy as np
 
@@ -24,16 +25,16 @@ def fetch_ohlc_data(crypto="BTC", currency="USD", limit=7):
         "limit": limit,
         "api_key": API_KEY
     }
-    response = requests.get(BASE_URL_OHLC, params=params)
-    if response.status_code == 200:
-        try:
+    try:
+        response = requests.get(BASE_URL_OHLC, params=params, timeout=10)
+        if response.status_code == 200:
             data = response.json()["Data"]["Data"]
             return data  # Return all fetched OHLC data
-        except (KeyError, IndexError):
-            print("Error: Unexpected API response format.")
+        else:
+            print(f"Error fetching OHLC data: {response.status_code}")
             return None
-    else:
-        print(f"Error fetching OHLC data: {response.status_code}")
+    except requests.RequestException as e:
+        print(f"Error: {e}")
         return None
 
 # Function to Calculate Volatility
@@ -68,25 +69,33 @@ def prepare_features(historical_data):
 
     return features
 
+# Function to Save to Log
+def save_to_log(timestamp, close_price, prediction, signal):
+    log_exists = LOG_PATH.exists()
+    with open(LOG_PATH, "a") as log_file:
+        if not log_exists:
+            log_file.write("timestamp,real_price,predicted_price,signal\n")
+        log_file.write(f"{timestamp},{close_price},{prediction},{signal}\n")
+
 # Main Function
 def main():
     print("Loading trained model...")
     model = joblib.load(MODEL_PATH)
     print("Model loaded successfully.\n")
 
-    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-    fetch_interval = 300
+    os.makedirs(LOG_PATH.parent, exist_ok=True)
+    fetch_interval = 300  # Fetch data every 5 minutes
 
     while True:
         now = datetime.now(timezone.utc).replace(microsecond=0)
         print(f"Fetching OHLC data at {now}...")
-        historical_data = fetch_ohlc_data("BTC", "USD", limit=7)
 
-        if historical_data:
-            latest_data = historical_data[-1]
-            close_price = latest_data.get("close", 0)
+        try:
+            historical_data = fetch_ohlc_data("BTC", "USD", limit=7)
+            if historical_data:
+                latest_data = historical_data[-1]
+                close_price = latest_data.get("close", 0)
 
-            try:
                 features = prepare_features(historical_data)
                 prediction = model.predict(features)[0]
 
@@ -106,15 +115,13 @@ def main():
                 print("=" * 50)
 
                 # Save to Log
-                if not LOG_PATH.exists():
-                    with open(LOG_PATH, "w") as log_file:
-                        log_file.write("timestamp,real_price,predicted_price,signal\n")
+                save_to_log(now, close_price, prediction, signal)
 
-                with open(LOG_PATH, "a") as log_file:
-                    log_file.write(f"{now},{close_price},{prediction},{signal}\n")
+            else:
+                print("No data fetched. Skipping this iteration.")
 
-            except ValueError as e:
-                print(f"Error during feature preparation: {e}")
+        except Exception as e:
+            print(f"Error during prediction: {e}")
 
         time.sleep(fetch_interval)
 

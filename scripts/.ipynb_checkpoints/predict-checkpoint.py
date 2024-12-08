@@ -3,12 +3,25 @@ import pandas as pd
 import joblib
 import os
 from pathlib import Path
+from sqlalchemy import create_engine
 
 # File Paths
 BASE_PATH = Path(__file__).resolve().parents[1]
-MODEL_PATH = BASE_PATH / "models" / "linear_regression_model.pkl"
+MODEL_PATH = BASE_PATH / "models" / "regression_model.pkl"
 NEW_DATA_PATH = BASE_PATH / "data" / "new_data.csv"
 PREDICTIONS_PATH = BASE_PATH / "data" / "predictions.csv"
+
+# MySQL Configuration
+MYSQL_CONFIG = {
+    'host': 'localhost',
+    'port': 3333,
+    'user': 'yeriahz_dev',
+    'password': 'apassword',
+    'database': 'yeriahz_neural_crypt'
+}
+
+# Create MySQL Engine
+engine = create_engine(f"mysql+pymysql://{MYSQL_CONFIG['user']}:{MYSQL_CONFIG['password']}@{MYSQL_CONFIG['host']}:{MYSQL_CONFIG['port']}/{MYSQL_CONFIG['database']}")
 
 # Function to Validate File Existence
 def validate_file(file_path):
@@ -32,25 +45,32 @@ def validate_columns(dataframe, required_columns):
 # Function to Prepare Features
 def prepare_features(data):
     """
-    Prepare features for prediction, including lagged close price and 7-day moving average.
+    Prepare features for prediction, including lagged close price, 7-day moving average, volatility, VWAP, and percentage change.
     """
     data["Close_Lag1"] = data["Close Price"].shift(1)  # Lagged feature
     window = min(len(data), 7)  # Use smaller window if dataset is small
     data["7-day MA"] = data["Close Price"].rolling(window=window).mean()  # Adjusted moving average
+    data["Volatility"] = (data["High Price"] - data["Low Price"]) / data["Low Price"] * 100
+    data["VWAP"] = data["Volume To"] / (data["High Price"] + data["Low Price"] + data["Close Price"])
+    data["Pct_Change"] = data["Close Price"].pct_change() * 100
 
     # Handle missing values
-    data["Close_Lag1"] = data["Close_Lag1"].bfill()
-    data["7-day MA"] = data["7-day MA"].bfill()
+    feature_cols = ["Close_Lag1", "7-day MA", "Volatility", "VWAP", "Pct_Change"]
+    for col in feature_cols:
+        data[col] = data[col].fillna(data[col].mean())
 
-    # Check for remaining NaN values
-    if data[["Close_Lag1", "7-day MA"]].isnull().any().any():
-        print("Warning: Remaining NaN values detected after processing.")
-        print(data[["Close_Lag1", "7-day MA"]].isnull().sum())
+    # Drop rows with remaining NaN values (final check)
+    data.dropna(subset=feature_cols, inplace=True)
 
-    # Drop rows with NaN values (final check)
-    data.dropna(subset=["Close_Lag1", "7-day MA"], inplace=True)
+    return data[feature_cols]
 
-    return data[["Close_Lag1", "7-day MA"]]
+# Function to Save Predictions to MySQL
+def save_to_mysql(dataframe, table_name):
+    try:
+        dataframe.to_sql(name=table_name, con=engine, if_exists='replace', index=False)
+        print(f"Predictions saved to MySQL table '{table_name}'.")
+    except Exception as e:
+        print(f"Error saving predictions to MySQL: {e}")
 
 # Main Function
 def main():
@@ -81,10 +101,13 @@ def main():
         print("Making predictions...")
         new_data["Predicted_Close"] = model.predict(X_new)
 
-        # Step 6: Save Predictions
+        # Step 6: Save Predictions to CSV
         PREDICTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
         new_data.to_csv(PREDICTIONS_PATH, index=False)
         print(f"Predictions saved to {PREDICTIONS_PATH}")
+
+        # Step 7: Save Predictions to MySQL
+        save_to_mysql(new_data, "predictions")
 
     except Exception as e:
         print(f"Error: {e}")
