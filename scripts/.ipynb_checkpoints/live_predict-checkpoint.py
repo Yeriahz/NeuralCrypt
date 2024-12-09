@@ -7,15 +7,28 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 import numpy as np
+from sqlalchemy import create_engine
 
 # File Paths
 BASE_PATH = Path(__file__).resolve().parents[1]
 MODEL_PATH = BASE_PATH / "models" / "regression_model.pkl"
 LOG_PATH = BASE_PATH / "logs" / "live_predictions.csv"
 
+# MySQL Configuration
+MYSQL_CONFIG = {
+    'host': '147.135.37.208',
+    'port': 3307,
+    'user': 'yeriahz_dev',
+    'password': 'Wo58vIka16ka',
+    'database': 'neural_crypt'
+}
+
+# Create MySQL Engine
+engine = create_engine(f"mysql+pymysql://{MYSQL_CONFIG['user']}:{MYSQL_CONFIG['password']}@{MYSQL_CONFIG['host']}:{MYSQL_CONFIG['port']}/{MYSQL_CONFIG['database']}")
+
 # Cryptocompare API Key and Base URL
 API_KEY = '9bf2ff68d6680c3f789283da46195442cef9ee8f601182cfc731f248ab6616e9'
-BASE_URL_OHLC = "https://min-api.cryptocompare.com/data/v2/histohour"  # Fetch hourly data
+BASE_URL_OHLC = "https://min-api.cryptocompare.com/data/v2/histohour"
 
 # Function to Fetch OHLC Data
 def fetch_ohlc_data(crypto="BTC", currency="USD", limit=7):
@@ -27,19 +40,16 @@ def fetch_ohlc_data(crypto="BTC", currency="USD", limit=7):
     }
     try:
         response = requests.get(BASE_URL_OHLC, params=params, timeout=10)
-        if response.status_code == 200:
-            data = response.json()["Data"]["Data"]
-            return data  # Return all fetched OHLC data
-        else:
-            print(f"Error fetching OHLC data: {response.status_code}")
-            return None
+        response.raise_for_status()
+        data = response.json().get("Data", {}).get("Data", [])
+        return data
     except requests.RequestException as e:
-        print(f"Error: {e}")
+        print(f"Error fetching OHLC data: {e}")
         return None
 
 # Function to Calculate Volatility
 def calculate_volatility(high, low):
-    return (high - low) / low * 100 if low > 0 else 0  # Avoid division by zero
+    return (high - low) / low * 100 if low > 0 else 0
 
 # Function to Prepare Features for Prediction
 def prepare_features(historical_data):
@@ -51,14 +61,12 @@ def prepare_features(historical_data):
     low_prices = [day["low"] for day in historical_data]
     volumes = [day["volumeto"] for day in historical_data]
 
-    # Calculate Features
     close_lag1 = close_prices[-2]
     seven_day_ma = np.mean(close_prices)
     volatility = calculate_volatility(max(high_prices), min(low_prices))
     vwap = volumes[-1] / (max(high_prices) + min(low_prices) + close_prices[-1])
     pct_change = (close_prices[-1] - close_prices[-2]) / close_prices[-2] * 100
 
-    # Create Feature DataFrame
     features = pd.DataFrame([{
         "Close_Lag1": close_lag1,
         "7-day MA": seven_day_ma,
@@ -69,13 +77,26 @@ def prepare_features(historical_data):
 
     return features
 
-# Function to Save to Log
-def save_to_log(timestamp, close_price, prediction, signal):
+# Function to Save Predictions to Log and MySQL
+def save_predictions(timestamp, close_price, prediction, signal):
     log_exists = LOG_PATH.exists()
     with open(LOG_PATH, "a") as log_file:
         if not log_exists:
             log_file.write("timestamp,real_price,predicted_price,signal\n")
         log_file.write(f"{timestamp},{close_price},{prediction},{signal}\n")
+
+    # Save to MySQL
+    try:
+        df = pd.DataFrame([{
+            "timestamp": timestamp,
+            "real_price": close_price,
+            "predicted_price": prediction,
+            "signal": signal
+        }])
+        df.to_sql(name="live_predictions", con=engine, if_exists="append", index=False)
+        print("Prediction saved to MySQL table 'live_predictions'.")
+    except Exception as e:
+        print(f"Error saving prediction to MySQL: {e}")
 
 # Main Function
 def main():
@@ -114,8 +135,8 @@ def main():
                 print(f"Trading Signal: {signal}")
                 print("=" * 50)
 
-                # Save to Log
-                save_to_log(now, close_price, prediction, signal)
+                # Save to Log and MySQL
+                save_predictions(now, close_price, prediction, signal)
 
             else:
                 print("No data fetched. Skipping this iteration.")

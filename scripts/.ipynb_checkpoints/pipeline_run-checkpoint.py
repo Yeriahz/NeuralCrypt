@@ -1,10 +1,12 @@
 import subprocess
 import sys
 import time
+import os
 
 def run_pipeline():
     scripts = [
         "data_collection.py",
+        "data_quality_check.py",
         "predictive_model.py",
         "predict.py",
         "live_predict.py"
@@ -12,7 +14,12 @@ def run_pipeline():
 
     for script in scripts:
         print(f"\n{'=' * 20} Running {script} {'=' * 20}")
-        
+
+        # Check if the script file exists before attempting to run it
+        if not os.path.exists(script):
+            print(f"Error: {script} not found. Skipping this step.")
+            continue
+
         try:
             result = subprocess.run([sys.executable, script], capture_output=True, text=True)
             if result.returncode == 0:

@@ -28,29 +28,25 @@ print("API keys, base URLs, and MySQL configurations set up.")
 
 # Function to Fetch Data from an API
 def fetch_data(api, endpoint, params=None):
+    base_url = CRYPTOCOMPARE_BASE_URL if api == "cryptocompare" else COINGECKO_BASE_URL
+    params = params or {}
     if api == "cryptocompare":
-        base_url = CRYPTOCOMPARE_BASE_URL
-        params = params or {}
         params["api_key"] = CRYPTOCOMPARE_API_KEY
-    elif api == "coingecko":
-        base_url = COINGECKO_BASE_URL
-    else:
-        raise ValueError("Unsupported API specified.")
-    
+
     url = f"{base_url}{endpoint}"
-    response = requests.get(url, params=params)
-    
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
         return response.json()
-    else:
-        print(f"Error fetching data from {api}: {response.status_code}")
+    except requests.RequestException as e:
+        print(f"Error fetching data from {api}: {e}")
         return None
 
 # Fetch Historical Daily Data from CryptoCompare
 def get_historical_daily(crypto="BTC", currency="USD", limit=100):
     params = {"fsym": crypto, "tsym": currency, "limit": limit}
     data = fetch_data("cryptocompare", "histoday", params)
-    if data:
+    if data and "Data" in data["Data"]:
         df = pd.DataFrame(data["Data"]["Data"])
         df.rename(columns={
             "time": "time",
@@ -62,6 +58,11 @@ def get_historical_daily(crypto="BTC", currency="USD", limit=100):
             "close": "Close Price"
         }, inplace=True)
         df["time"] = pd.to_datetime(df["time"], unit="s")
+        
+        # Drop the 'conversionSymbol' column if present
+        if "conversionSymbol" in df.columns:
+            df.drop(columns=["conversionSymbol"], inplace=True)
+        
         return df
     else:
         print("Failed to fetch historical daily data.")
@@ -72,15 +73,20 @@ def get_latest_data(crypto_id="bitcoin", currency="usd", days="7"):
     endpoint = f"coins/{crypto_id.lower()}/market_chart"
     params = {"vs_currency": currency, "days": days}
     data = fetch_data("coingecko", endpoint, params)
-    if data:
+    if data and "prices" in data:
         prices = data.get("prices", [])
         df = pd.DataFrame(prices, columns=["time", "Close Price"])
         df["time"] = pd.to_datetime(df["time"], unit="ms")
-        df["High Price"] = df["Close Price"] * 1.02  # Mock data
+        df["High Price"] = df["Close Price"] * 1.02
         df["Low Price"] = df["Close Price"] * 0.98
         df["Open Price"] = df["Close Price"]
-        df["Volume From"] = 0  # Default for missing data
+        df["Volume From"] = 0
         df["Volume To"] = 0
+        
+        # Drop the 'conversionSymbol' column if present
+        if "conversionSymbol" in df.columns:
+            df.drop(columns=["conversionSymbol"], inplace=True)
+        
         return df
     else:
         print("Failed to fetch latest data.")
@@ -88,10 +94,6 @@ def get_latest_data(crypto_id="bitcoin", currency="usd", days="7"):
 
 # Save Data to CSV
 def save_to_csv(dataframe, filename):
-    required_columns = ["time", "High Price", "Low Price", "Open Price", "Volume From", "Volume To", "Close Price"]
-    for col in required_columns:
-        if col not in dataframe:
-            dataframe[col] = 0
     file_path = DATA_FOLDER / filename
     DATA_FOLDER.mkdir(parents=True, exist_ok=True)
     dataframe.to_csv(file_path, index=False)
@@ -109,13 +111,13 @@ def save_to_mysql(dataframe, table_name):
 def main():
     print("Fetching historical daily data from CryptoCompare...")
     daily_data = get_historical_daily("BTC", "USD", 100)
-    if daily_data is not None:
+    if daily_data is not None and not daily_data.empty:
         save_to_csv(daily_data, "btc_historical_daily.csv")
         save_to_mysql(daily_data, "btc_historical_daily")
 
-    print("Fetching latest hourly data for predictions from multiple sources...")
+    print("Fetching latest hourly data for predictions from CoinGecko...")
     latest_data = get_latest_data("bitcoin", "usd", "7")
-    if latest_data is not None:
+    if latest_data is not None and not latest_data.empty:
         save_to_csv(latest_data, "new_data.csv")
         save_to_mysql(latest_data, "new_data")
 

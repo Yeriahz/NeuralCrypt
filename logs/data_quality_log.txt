@@ -1,0 +1,16 @@
+Data Quality Check Log
+==================================================
+
+Missing values detected in C:\Users\jeria\OneDrive\Documents\GitHub\NeuralCrypt-Labs\data\btc_historical_daily.csv:
+time                  0
+High Price            0
+Low Price             0
+Open Price            0
+Volume From           0
+Volume To             0
+Close Price           0
+conversionType        0
+conversionSymbol    101
+dtype: int64
+Outliers detected in column 'Volume From' of C:\Users\jeria\OneDrive\Documents\GitHub\NeuralCrypt-Labs\data\btc_historical_daily.csv: 3
+Outliers detected in column 'Volume To' of C:\Users\jeria\OneDrive\Documents\GitHub\NeuralCrypt-Labs\data\btc_historical_daily.csv: 3
