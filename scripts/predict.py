@@ -13,11 +13,11 @@ PREDICTIONS_PATH = BASE_PATH / "data" / "predictions.csv"
 
 # MySQL Configuration
 MYSQL_CONFIG = {
-    'host': 'localhost',
-    'port': 3333,
+    'host': '147.135.37.208',
+    'port': 3307,
     'user': 'yeriahz_dev',
-    'password': 'apassword',
-    'database': 'yeriahz_neural_crypt'
+    'password': 'Wo58vIka16ka',
+    'database': 'neural_crypt'
 }
 
 # Create MySQL Engine
