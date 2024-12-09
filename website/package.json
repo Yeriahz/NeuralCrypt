@@ -1,0 +1,21 @@
+{
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "tsx ./src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "upload": "docker build . -t registry.flabby.dev/yeriahz-neuralcrypt:latest && docker push registry.flabby.dev/yeriahz-neuralcrypt:latest"
+  },
+  "type": "module",
+  "description": "",
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/ejs": "^3.1.5",
+    "@types/express": "^5.0.0",
+    "nodemon": "^3.1.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,12 +1,37 @@
 services:
-  mysql_development:
+  neural_crypt_mysql:
+    container_name: arma-reforger
     image: mysql:8.0.33
     command: --default-authentication-plugin=mysql_native_password
     restart: always
+    volumes:
+      - neural_crypt_storage:/var/lib/mysql
     environment:
       MYSQL_ROOT_PASSWORD: adevpassword
       MYSQL_USER: yeriahz_dev
       MYSQL_PASSWORD: apassword
-      MYSQL_DATABASE: yeriahz_neural_crypt
+      MYSQL_DATABASE: neural_crypt
     ports:
-      - 3333:3306
+      - 3307:3306
+    networks:
+      - portainer_agent_network
+
+  neural_crypt_website:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+    container_name: neural_crypt_website
+    restart: always
+    ports:
+      - 80:80
+    networks:
+      - portainer_agent_network
+
+networks:
+  portainer_agent_network:
+    name: portainer_agent_network
+    # external: true
+
+volumes:
+  neural_crypt_storage:
+  

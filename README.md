@@ -17,7 +17,7 @@
 ```
 python -m venv venv
 ```
-2. Open MySQL database with Docker
+2. Open MySQL database & Website with Docker
     - `docker compose up`
 3. Activate virtual environment
     - Windows: ``` .\venv\Scripts\activate ```

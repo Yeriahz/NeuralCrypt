@@ -1,3 +1,6 @@
 venv/
 .env
 .vscode/
+node_modules
+package-lock.json
+dist
