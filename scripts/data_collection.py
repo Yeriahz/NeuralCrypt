@@ -46,7 +46,7 @@ def fetch_data(api, endpoint, params=None):
 def get_historical_daily(crypto="BTC", currency="USD", limit=100):
     params = {"fsym": crypto, "tsym": currency, "limit": limit}
     data = fetch_data("cryptocompare", "histoday", params)
-    if data and "Data" in data["Data"]:
+    if data and "Data" in data.get("Data", {}):
         df = pd.DataFrame(data["Data"]["Data"])
         df.rename(columns={
             "time": "time",
@@ -58,11 +58,6 @@ def get_historical_daily(crypto="BTC", currency="USD", limit=100):
             "close": "Close Price"
         }, inplace=True)
         df["time"] = pd.to_datetime(df["time"], unit="s")
-        
-        # Drop the 'conversionSymbol' column if present
-        if "conversionSymbol" in df.columns:
-            df.drop(columns=["conversionSymbol"], inplace=True)
-        
         return df
     else:
         print("Failed to fetch historical daily data.")
@@ -82,11 +77,6 @@ def get_latest_data(crypto_id="bitcoin", currency="usd", days="7"):
         df["Open Price"] = df["Close Price"]
         df["Volume From"] = 0
         df["Volume To"] = 0
-        
-        # Drop the 'conversionSymbol' column if present
-        if "conversionSymbol" in df.columns:
-            df.drop(columns=["conversionSymbol"], inplace=True)
-        
         return df
     else:
         print("Failed to fetch latest data.")

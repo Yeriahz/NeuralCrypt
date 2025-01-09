@@ -8,10 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 import numpy as np
 from sqlalchemy import create_engine
+from tabulate import tabulate  # For better table formatting in CMD
 
 # File Paths
 BASE_PATH = Path(__file__).resolve().parents[1]
-MODEL_PATH = BASE_PATH / "models" / "regression_model.pkl"
+MODEL_PATH = BASE_PATH / "models" / "multi_horizon_model.pkl"
 LOG_PATH = BASE_PATH / "logs" / "live_predictions.csv"
 
 # MySQL Configuration
@@ -28,10 +29,10 @@ engine = create_engine(f"mysql+pymysql://{MYSQL_CONFIG['user']}:{MYSQL_CONFIG['p
 
 # Cryptocompare API Key and Base URL
 API_KEY = '9bf2ff68d6680c3f789283da46195442cef9ee8f601182cfc731f248ab6616e9'
-BASE_URL_OHLC = "https://min-api.cryptocompare.com/data/v2/histohour"
+BASE_URL_OHLC = "https://min-api.cryptocompare.com/data/v2/histominute"
 
 # Function to Fetch OHLC Data
-def fetch_ohlc_data(crypto="BTC", currency="USD", limit=7):
+def fetch_ohlc_data(crypto="BTC", currency="USD", limit=60):
     params = {
         "fsym": crypto,
         "tsym": currency,
@@ -47,96 +48,107 @@ def fetch_ohlc_data(crypto="BTC", currency="USD", limit=7):
         print(f"Error fetching OHLC data: {e}")
         return None
 
-# Function to Calculate Volatility
-def calculate_volatility(high, low):
-    return (high - low) / low * 100 if low > 0 else 0
+# Function to Calculate RSI
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0).rolling(window=period).mean().bfill()
+    loss = -delta.where(delta < 0, 0).rolling(window=period).mean().bfill()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.bfill()
 
 # Function to Prepare Features for Prediction
 def prepare_features(historical_data):
-    if len(historical_data) < 2:
-        raise ValueError("Insufficient historical data for feature calculation.")
+    df = pd.DataFrame(historical_data)
+    df['time'] = pd.to_datetime(df['time'], unit='s')
+    df['Close'] = df['close']
+    df['High'] = df['high']
+    df['Low'] = df['low']
+    df['Volume'] = df['volumeto']
 
-    close_prices = [day["close"] for day in historical_data]
-    high_prices = [day["high"] for day in historical_data]
-    low_prices = [day["low"] for day in historical_data]
-    volumes = [day["volumeto"] for day in historical_data]
+    # Calculate new features
+    df['Close_Lag1'] = df['Close'].shift(1).bfill()
+    df['SMA_5'] = df['Close'].rolling(window=5).mean().bfill()
+    df['EMA_5'] = df['Close'].ewm(span=5).mean().bfill()
+    df['Volatility'] = ((df['High'] - df['Low']) / df['Low']) * 100
+    df['Pct_Change'] = df['Close'].pct_change().bfill()
+    df['RSI'] = calculate_rsi(df['Close'])
 
-    close_lag1 = close_prices[-2]
-    seven_day_ma = np.mean(close_prices)
-    volatility = calculate_volatility(max(high_prices), min(low_prices))
-    vwap = volumes[-1] / (max(high_prices) + min(low_prices) + close_prices[-1])
-    pct_change = (close_prices[-1] - close_prices[-2]) / close_prices[-2] * 100
-
-    features = pd.DataFrame([{
-        "Close_Lag1": close_lag1,
-        "7-day MA": seven_day_ma,
-        "Volatility": volatility,
-        "VWAP": vwap,
-        "Pct_Change": pct_change
-    }])
+    # Ensure the latest data point is returned with the expected features
+    try:
+        latest_data = df.iloc[-1]
+        features = latest_data[['Close_Lag1', 'SMA_5', 'EMA_5', 'Volatility', 'Pct_Change', 'RSI']].to_frame().T
+    except KeyError as e:
+        raise ValueError(f"Missing required feature during prediction: {e}")
 
     return features
 
 # Function to Save Predictions to Log and MySQL
-def save_predictions(timestamp, close_price, prediction, signal):
+def save_predictions(timestamp, close_price, predictions, signals):
+    horizons = ["5min", "15min", "30min", "45min", "1h"]
+    log_data = {
+        "timestamp": timestamp,
+        "real_price": close_price,
+        **{f"predicted_{horizon}": pred for horizon, pred in zip(horizons, predictions)},
+        **{f"signal_{horizon}": sig for horizon, sig in zip(horizons, signals)}
+    }
+
+    # Save to MySQL
+    df = pd.DataFrame([log_data])
+    try:
+        df.to_sql(name="multi_horizon_predictions", con=engine, if_exists="append", index=False)
+        print("Predictions and signals saved to MySQL.")
+    except Exception as e:
+        print(f"Error saving predictions to MySQL: {e}")
+
+    # Save to CSV Log
     log_exists = LOG_PATH.exists()
     with open(LOG_PATH, "a") as log_file:
         if not log_exists:
-            log_file.write("timestamp,real_price,predicted_price,signal\n")
-        log_file.write(f"{timestamp},{close_price},{prediction},{signal}\n")
-
-    # Save to MySQL
-    try:
-        df = pd.DataFrame([{
-            "timestamp": timestamp,
-            "real_price": close_price,
-            "predicted_price": prediction,
-            "signal": signal
-        }])
-        df.to_sql(name="live_predictions", con=engine, if_exists="append", index=False)
-        print("Prediction saved to MySQL table 'live_predictions'.")
-    except Exception as e:
-        print(f"Error saving prediction to MySQL: {e}")
+            headers = ",".join(log_data.keys())
+            log_file.write(headers + "\n")
+        log_file.write(",".join(map(str, log_data.values())) + "\n")
 
 # Main Function
 def main():
     print("Loading trained model...")
-    model = joblib.load(MODEL_PATH)
+    try:
+        model = joblib.load(MODEL_PATH)
+    except FileNotFoundError:
+        print("Error: Model file not found. Please train the model first.")
+        return
     print("Model loaded successfully.\n")
-
-    os.makedirs(LOG_PATH.parent, exist_ok=True)
-    fetch_interval = 300  # Fetch data every 5 minutes
 
     while True:
         now = datetime.now(timezone.utc).replace(microsecond=0)
-        print(f"Fetching OHLC data at {now}...")
+        print(f"\nFetching OHLC data at {now}...")
 
         try:
-            historical_data = fetch_ohlc_data("BTC", "USD", limit=7)
+            historical_data = fetch_ohlc_data("BTC", "USD", limit=60)
             if historical_data:
-                latest_data = historical_data[-1]
-                close_price = latest_data.get("close", 0)
-
+                close_price = historical_data[-1]["close"]
                 features = prepare_features(historical_data)
-                prediction = model.predict(features)[0]
+                predictions = model.predict(features)[0]
 
-                # Determine Trading Signal
-                if prediction > close_price * 1.02:
-                    signal = "Buy"
-                elif prediction < close_price * 0.98:
-                    signal = "Sell"
-                else:
-                    signal = "Hold"
+                # Generate Buy/Sell/Hold signals
+                signals = [
+                    "Buy" if pred > close_price * 1.01 else
+                    "Sell" if pred < close_price * 0.99 else
+                    "Hold"
+                    for pred in predictions
+                ]
 
-                # Display Predictions in CMD
-                print("=" * 50)
-                print(f"Real-Time BTC Close Price at {now}: ${close_price:.2f}")
-                print(f"Predicted Close Price: ${prediction:.2f}")
-                print(f"Trading Signal: {signal}")
-                print("=" * 50)
+                # Display Predictions
+                horizons = ["5 min", "15 min", "30 min", "45 min", "1 hour"]
+                prediction_table = [
+                    ["Current Price", f"${close_price:.2f}"],
+                    *[[h, f"${p:.2f}", s] for h, p, s in zip(horizons, predictions, signals)]
+                ]
+
+                print(tabulate(prediction_table, headers=["Horizon", "Predicted Price", "Signal"], tablefmt="grid"))
 
                 # Save to Log and MySQL
-                save_predictions(now, close_price, prediction, signal)
+                save_predictions(now, close_price, predictions, signals)
 
             else:
                 print("No data fetched. Skipping this iteration.")
@@ -144,7 +156,7 @@ def main():
         except Exception as e:
             print(f"Error during prediction: {e}")
 
-        time.sleep(fetch_interval)
+        time.sleep(300)  # Fetch data every 5 minutes
 
 if __name__ == "__main__":
     main()

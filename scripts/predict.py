@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 
 # File Paths
 BASE_PATH = Path(__file__).resolve().parents[1]
-MODEL_PATH = BASE_PATH / "models" / "regression_model.pkl"
+MODEL_PATH = BASE_PATH / "models" / "multi_horizon_model.pkl"
 NEW_DATA_PATH = BASE_PATH / "data" / "new_data.csv"
 PREDICTIONS_PATH = BASE_PATH / "data" / "predictions.csv"
 
